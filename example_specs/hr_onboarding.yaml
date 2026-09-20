@@ -1,0 +1,64 @@
+# Vertical-slice spec for the "Employee Onboarding Template" (slide 13).
+# This is the ONLY hand-written input. Everything under generated/ is produced
+# by scaffold_agent.py from this file.
+
+project:
+  name: auditable-automation
+  vertical_slice: hr_onboarding
+
+template:
+  name: "Employee Onboarding Template"
+  natural_language_intent: >
+    Extract employee identity, joining details, and flag missing mandatory
+    documents.
+  fields:
+    - name: employee_id
+      type: string
+      description: "Unique ID"
+    - name: first_name
+      type: string
+    - name: last_name
+      type: string
+    - name: department
+      type: string
+    - name: start_date
+      type: string
+      format: date
+    - name: documents
+      type: object
+      properties:
+        id_proof: {type: string, enum: ["verified", "missing"]}
+        contract: {type: string, enum: ["signed", "unsigned"]}
+    - name: salary_amount
+      type: number
+
+# Schema-aware rules (slide 7): field references a dotted path into the
+# extracted JSON; condition + value are evaluated deterministically.
+rules:
+  - id: RULE_COMPLETENESS_ID
+    category: completeness
+    field: "documents.id_proof"
+    condition: equals
+    value: "missing"
+    score_delta: -15
+    reason: "Missing mandatory ID"
+  - id: RULE_ID_412
+    category: validation
+    field: "documents.id_proof"
+    condition: equals
+    value: "missing"
+    score_delta: 50
+    reason: "Missing Government ID details in JSON"
+  - id: RULE_ELIGIBILITY_SALARY
+    category: eligibility
+    field: "salary_amount"
+    condition: greater_than
+    value: 0
+    score_delta: 5
+    reason: "Salary present and eligible for payroll run"
+
+# Scoring builder thresholds (slide 7): "Completely deterministic."
+scoring:
+  low_max: 20
+  medium_max: 60
+  # anything above medium_max => HIGH
