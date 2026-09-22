@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Pluggable AI provider used by the Template Agent (slide 6) and by the
     # OCR/extraction step of the runtime pipeline (slide 5, slide 9).
     xai_api_key: str = ""
-    template_agent_model: str = "grok-4"
+    template_agent_model: str = "openai/gpt-oss-120b"
 
     class Config:
         env_file = ".env"

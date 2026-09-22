@@ -14,7 +14,7 @@ MAX_REGENERATION_ATTEMPTS = 3
 class TemplateAgent:
     def __init__(self):
         # Same OpenAI library, just pointed at xAI's servers instead of OpenAI's.
-        self.client = OpenAI(api_key=settings.xai_api_key, base_url="https://api.x.ai/v1")
+        self.client = OpenAI(api_key=settings.xai_api_key, base_url="https://api.groq.com/openai/v1")
 
     def draft_schema(self, natural_language_intent: str) -> dict:
         system_prompt = (

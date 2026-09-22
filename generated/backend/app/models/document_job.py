@@ -32,7 +32,8 @@ class JobStage(str, enum.Enum):
 # buggy task can never silently skip or corrupt the audit trail.
 ALLOWED_TRANSITIONS: dict[JobStage, set[JobStage]] = {
     JobStage.INGESTED: {JobStage.QUEUED},
-    JobStage.QUEUED: {JobStage.PROCESSING},
+    JobStage.QUEUED: {JobStage.CLASSIFYING},
+    JobStage.CLASSIFYING: {JobStage.PROCESSING, JobStage.FAILED},
     JobStage.PROCESSING: {JobStage.EXTRACTED, JobStage.FAILED},
     JobStage.EXTRACTED: {JobStage.RULE_EVALUATED, JobStage.FAILED},
     JobStage.RULE_EVALUATED: {JobStage.SCORED, JobStage.FAILED},
@@ -49,7 +50,8 @@ class DocumentJob(Base):
     __tablename__ = "document_jobs"
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    template_version_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("template_versions.id"))
+    template_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("template_versions.id"), nullable=True)
+    classification_confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)  # NEW, store as % (0-100)
     object_storage_key: Mapped[str] = mapped_column(String(512), nullable=False)  # raw doc blob
     stage: Mapped[JobStage] = mapped_column(Enum(JobStage), default=JobStage.INGESTED)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
