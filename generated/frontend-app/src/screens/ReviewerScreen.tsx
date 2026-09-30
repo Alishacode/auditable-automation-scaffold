@@ -1,61 +1,141 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { getJob } from "../api";
+import type { JobDetail } from "../api";
 
-// Split-pane reviewer screen (slide 4 "Reviewer" persona, slide 13
-// "Reviewer Queue"): document preview on the left, extracted JSON +
-// traceable risk scorecard on the right.
-
-type RuleEvaluationView = {
-  ruleKey: string;
-  passed: boolean;
-  scoreDeltaApplied: number;
+const badgeColor: Record<string, string> = {
+  low: "#2e7d32",
+  medium: "#ed6c02",
+  high: "#c62828",
 };
+const TERMINAL_STAGES = [
+  "COMPLETED",
+  "REVIEW_REQUIRED",
+  "REVIEWED",
+  "TERMINAL_FAILURE",
+];
 
-type JobDetail = {
-  id: string;
-  stage: string;
-  extractedJson: Record<string, unknown> | null;
-  riskScore: number | null;
-  riskLevel: "low" | "medium" | "high" | null;
-  aiSummary: string | null;
-};
-
-export function ReviewerScreen({ jobId }: { jobId: string }) {
+export function ReviewerScreen({
+  jobId,
+  onBack,
+}: {
+  jobId: string;
+  onBack: () => void;
+}) {
   const [job, setJob] = useState<JobDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    fetch(`/api/v1/jobs/${jobId}`)
-      .then((r) => r.json())
-      .then(setJob);
-  }, [jobId]);
+    setJob(null);
+    setError(null);
 
-  if (!job) return <div>Loading…</div>;
+    async function poll() {
+      try {
+        const data = await getJob(jobId);
+        setJob(data);
+        if (TERMINAL_STAGES.includes(data.stage) && intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        if (intervalRef.current) clearInterval(intervalRef.current);
+      }
+    }
+
+    poll();
+    intervalRef.current = window.setInterval(poll, 2000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [jobId]);
 
   return (
     <div
-      style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}
+      style={{
+        padding: "1.5rem",
+        maxWidth: 900,
+        margin: "0 auto",
+        textAlign: "left",
+      }}
     >
-      <section>
-        <h2>Document Preview</h2>
-        {/* Wire up your PDF/image viewer against job.id's source document. */}
-      </section>
+      <button onClick={onBack} style={{ marginBottom: "1rem" }}>
+        &larr; Back
+      </button>
 
-      <section>
-        <h2>Structured Output &amp; Risk</h2>
-        <pre>{JSON.stringify(job.extractedJson, null, 2)}</pre>
+      {error && <p style={{ color: "#c62828" }}>Error: {error}</p>}
+      {!job && !error && <p>Loading…</p>}
 
-        {job.riskLevel && (
-          <div className={`risk-badge risk-${job.riskLevel}`}>
-            Risk Score: {job.riskScore} ({job.riskLevel.toUpperCase()})
-          </div>
-        )}
+      {job && (
+        <>
+          <h2>
+            Job {job.id.slice(0, 8)} — {job.stage}
+          </h2>
+          {!TERMINAL_STAGES.includes(job.stage) && (
+            <p>Processing… this updates automatically.</p>
+          )}
 
-        {job.aiSummary && (
-          <div>
-            <h3>AI-Generated Summary</h3>
-            <p>{job.aiSummary}</p>
-          </div>
-        )}
-      </section>
+          {job.risk_level && (
+            <div
+              style={{
+                display: "inline-block",
+                padding: "0.4rem 0.9rem",
+                borderRadius: 6,
+                color: "white",
+                background: badgeColor[job.risk_level],
+                marginBottom: "1rem",
+              }}
+            >
+              Risk score: {job.risk_score} ({job.risk_level.toUpperCase()})
+            </div>
+          )}
+
+          {job.extracted_json && (
+            <>
+              <h3>Extracted fields</h3>
+              <ExtractedTable data={job.extracted_json} />
+            </>
+          )}
+        </>
+      )}
     </div>
+  );
+}
+
+function ExtractedTable({ data }: { data: Record<string, unknown> }) {
+  const fields = (data.fields ?? data) as Record<string, unknown>;
+  const summary = typeof data.summary === "string" ? data.summary : null;
+
+  return (
+    <>
+      {summary && (
+        <p>
+          <strong>Summary:</strong> {summary}
+        </p>
+      )}
+      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+        <tbody>
+          {Object.entries(fields).map(([key, value]) => (
+            <tr key={key}>
+              <td
+                style={{
+                  padding: "4px 8px",
+                  borderBottom: "1px solid #8884",
+                  fontWeight: 600,
+                }}
+              >
+                {key}
+              </td>
+              <td
+                style={{ padding: "4px 8px", borderBottom: "1px solid #8884" }}
+              >
+                {typeof value === "object"
+                  ? JSON.stringify(value)
+                  : String(value)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }
